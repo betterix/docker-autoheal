@@ -1,10 +1,9 @@
 # syntax = docker/dockerfile:latest
 
-ARG ALPINE_VERSION=3.18
+FROM alpine:latest
 
-FROM alpine:${ALPINE_VERSION}
-
-RUN apk add --no-cache curl jq
+RUN apk upgrade --no-cache && \
+    apk add --no-cache curl jq
 
 ENV AUTOHEAL_CONTAINER_LABEL=autoheal \
     AUTOHEAL_START_PERIOD=0 \
