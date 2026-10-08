@@ -1,0 +1,25 @@
+version: 2
+
+multi-ecosystem-groups:
+  all-updates:
+    schedule:
+      interval: "daily"
+
+updates:
+  # GitHub Actions workflows in .github/workflows
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    patterns: ["*"]
+    multi-ecosystem-group: "all-updates"
+
+  # Root Dockerfile
+  - package-ecosystem: "docker"
+    directory: "/"
+    patterns: ["*"]
+    multi-ecosystem-group: "all-updates"
+
+  # Test Dockerfile
+  - package-ecosystem: "docker"
+    directory: "/tests/watch-autoheal"
+    patterns: ["*"]
+    multi-ecosystem-group: "all-updates"
