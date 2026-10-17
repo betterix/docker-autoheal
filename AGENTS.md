@@ -115,7 +115,7 @@ When editing or proposing changes in this repository, always follow these rules:
 ### F. Multi-Architecture Images & GHCR Pruning
 * When building multi-arch images (`platforms: linux/amd64,linux/arm64`), GHCR stores the individual platform manifests as untagged child objects beneath the parent `:latest` manifest index.
 * **NEVER use naive untagged deletion actions** (such as `actions/delete-package-versions` with `delete-only-untagged-versions: true`), as they wipe out the underlying `amd64`/`arm64` platform manifests, causing `docker pull` to fail with `manifest unknown`.
-* Always use a multi-arch aware cleaner like `jenskeiner/ghcr-container-repository-cleanup-action` that inspects manifest lists and protects child manifests of active tags.
+* Always protect child platform manifests of active tags. We use a native bash step with `gh api` and `jq` that queries active platform digests and only prunes truly orphaned untagged versions (avoiding Node.js runner deprecation warnings).
 * Set `provenance: false` in `docker/build-push-action` to prevent extraneous `unknown/unknown` attestation manifests on GHCR.
 
 ---

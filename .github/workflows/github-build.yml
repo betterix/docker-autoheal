@@ -64,10 +64,40 @@ jobs:
           provenance: false
 
       - name: Prune old orphaned untagged images
-        uses: jenskeiner/ghcr-container-repository-cleanup-action@v1
         if: github.event_name != 'pull_request'
         continue-on-error: true
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          keep-n-tagged: 5
-          keep-n-untagged: 0
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO_OWNER: ${{ github.repository_owner }}
+          PACKAGE_NAME: docker-autoheal
+        run: |
+          ENDPOINT="/user/packages/container/${PACKAGE_NAME}/versions"
+          if ! gh api "$ENDPOINT" >/dev/null 2>&1; then
+            ENDPOINT="/orgs/${REPO_OWNER}/packages/container/${PACKAGE_NAME}/versions"
+          fi
+
+          TOKEN=$(curl -s "https://ghcr.io/token?service=ghcr.io&scope=repository:${REPO_OWNER}/${PACKAGE_NAME}:pull" | jq -r .token)
+          ACTIVE_DIGESTS=$(curl -s -H "Authorization: Bearer $TOKEN" \
+            -H "Accept: application/vnd.oci.image.index.v1+json,application/vnd.docker.distribution.manifest.list.v2+json" \
+            "https://ghcr.io/v2/${REPO_OWNER}/${PACKAGE_NAME}/manifests/latest" | \
+            jq -r '.manifests[]?.digest // empty')
+
+          if [ -z "$ACTIVE_DIGESTS" ]; then
+            echo "Could not resolve active platform digests for latest; skipping pruning."
+            exit 0
+          fi
+
+          echo "Protecting active platform manifests:"
+          echo "$ACTIVE_DIGESTS"
+
+          gh api "$ENDPOINT" --paginate --jq '.[] | select(.metadata.container.tags | length == 0) | {id: .id, name: .name}' | \
+          jq -c . | while read -r item; do
+            VER_ID=$(echo "$item" | jq -r .id)
+            VER_NAME=$(echo "$item" | jq -r .name)
+            if echo "$ACTIVE_DIGESTS" | grep -q "$VER_NAME"; then
+              echo "Keeping active platform manifest: $VER_NAME"
+            else
+              echo "Deleting obsolete untagged manifest: ID $VER_ID ($VER_NAME)"
+              gh api --method DELETE "${ENDPOINT}/${VER_ID}" || true
+            fi
+          done
