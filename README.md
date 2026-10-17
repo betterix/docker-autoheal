@@ -1,7 +1,6 @@
 # Docker Autoheal
 
 [![CI Build](https://github.com/betterix/docker-autoheal/actions/workflows/github-build.yml/badge.svg)](https://github.com/betterix/docker-autoheal/actions/workflows/github-build.yml)
-[![GitHub Release](https://img.shields.io/github/v/release/betterix/docker-autoheal?include_prereleases&label=release)](https://github.com/betterix/docker-autoheal/releases)
 [![Container Image](https://img.shields.io/badge/ghcr.io-betterix%2Fdocker--autoheal-blue?logo=docker)](https://ghcr.io/betterix/docker-autoheal)
 
 A lightweight, zero-dependency monitoring daemon that monitors Docker containers and automatically restarts any container that enters an `unhealthy` state according to Docker's native `HEALTHCHECK`.

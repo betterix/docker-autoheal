@@ -61,3 +61,13 @@ jobs:
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+
+      - name: Prune old untagged container builds
+        uses: actions/delete-package-versions@v5
+        if: github.event_name != 'pull_request'
+        continue-on-error: true
+        with:
+          package-name: 'docker-autoheal'
+          package-type: 'container'
+          delete-only-untagged-versions: 'true'
+          min-versions-to-keep: 0
