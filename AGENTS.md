@@ -112,6 +112,12 @@ When editing or proposing changes in this repository, always follow these rules:
 * Keep `Dockerfile` clean without storing sensitive-looking keys in `ENV` instructions (Docker build linter flags `*_KEY` in `ENV`).
 * Keep `.dockerignore` up to date (`.git`, `*.md`, `LICENSE`, `tests`) so local git history is never transferred into build contexts.
 
+### F. Multi-Architecture Images & GHCR Pruning
+* When building multi-arch images (`platforms: linux/amd64,linux/arm64`), GHCR stores the individual platform manifests as untagged child objects beneath the parent `:latest` manifest index.
+* **NEVER use naive untagged deletion actions** (such as `actions/delete-package-versions` with `delete-only-untagged-versions: true`), as they wipe out the underlying `amd64`/`arm64` platform manifests, causing `docker pull` to fail with `manifest unknown`.
+* Always use a multi-arch aware cleaner like `jenskeiner/ghcr-container-repository-cleanup-action` that inspects manifest lists and protects child manifests of active tags.
+* Set `provenance: false` in `docker/build-push-action` to prevent extraneous `unknown/unknown` attestation manifests on GHCR.
+
 ---
 
 ## 5. Verification Commands

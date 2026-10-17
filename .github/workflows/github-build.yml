@@ -61,13 +61,13 @@ jobs:
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          provenance: false
 
-      - name: Prune old untagged container builds
-        uses: actions/delete-package-versions@v5
+      - name: Prune old orphaned untagged images
+        uses: jenskeiner/ghcr-container-repository-cleanup-action@v1
         if: github.event_name != 'pull_request'
         continue-on-error: true
         with:
-          package-name: 'docker-autoheal'
-          package-type: 'container'
-          delete-only-untagged-versions: 'true'
-          min-versions-to-keep: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+          keep-n-tagged: 5
+          keep-n-untagged: 0
