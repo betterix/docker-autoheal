@@ -1,122 +1,181 @@
 # Docker Autoheal
 
-Monitor and restart unhealthy docker containers. 
-This functionality was proposed to be included with the addition of `HEALTHCHECK`, however didn't make the cut.
-This container is a stand-in till there is native support for `--exit-on-unhealthy` https://github.com/docker/docker/pull/22719.
+[![CI Build](https://github.com/betterix/docker-autoheal/actions/workflows/github-build.yml/badge.svg)](https://github.com/betterix/docker-autoheal/actions/workflows/github-build.yml)
+[![GitHub Release](https://img.shields.io/github/v/release/betterix/docker-autoheal?include_prereleases&label=release)](https://github.com/betterix/docker-autoheal/releases)
+[![Container Image](https://img.shields.io/badge/ghcr.io-betterix%2Fdocker--autoheal-blue?logo=docker)](https://ghcr.io/betterix/docker-autoheal)
 
-## Supported tags and Dockerfile links
-- [`latest` (*Dockerfile*)](https://github.com/willfarrell/docker-autoheal/blob/main/Dockerfile) - Built daily
-- [`1.1.0` (*Dockerfile*)](https://github.com/willfarrell/docker-autoheal/blob/1.1.0/Dockerfile)
-- [`v0.7.0` (*Dockerfile*)](https://github.com/willfarrell/docker-autoheal/blob/v0.7.0/Dockerfile)
+A lightweight, zero-dependency monitoring daemon that monitors Docker containers and automatically restarts any container that enters an `unhealthy` state according to Docker's native `HEALTHCHECK`.
 
+---
 
-![](https://img.shields.io/docker/pulls/willfarrell/autoheal "Total docker pulls") [![](https://images.microbadger.com/badges/image/willfarrell/autoheal.svg)](http://microbadger.com/images/willfarrell/autoheal "Docker layer breakdown")
+## Features
 
-## How to use
+* **Lightweight & Fast**: Built on minimal Alpine Linux with only `curl` and `jq`.
+* **Multi-Arch**: Pre-built for `linux/amd64` and `linux/arm64`.
+* **Crash-Resilient**: Designed to stay alive through transient Docker daemon restarts and socket timeouts.
+* **Flexible Monitoring Modes**: Watch all containers, or only containers explicitly opting in via labels.
+* **Multi-Channel Alerts**: Webhooks with safe JSON encoding, Apprise push alerts, and post-restart hook scripts.
+* **Graceful Timeouts**: Configurable per-container stop timeouts (`autoheal.stop.timeout`) before forced termination.
 
-### 1. Docker CLI
-#### UNIX socket passthrough
+---
+
+## Container Image
+
+Published to GitHub Container Registry:
+
 ```bash
-docker run -d \
-    --name autoheal \
-    --restart=always \
-    -e AUTOHEAL_CONTAINER_LABEL=all \
-    -v /var/run/docker.sock:/var/run/docker.sock \
-    willfarrell/autoheal
-```
-#### TCP socket 
-```bash
-docker run -d \
-    --name autoheal \
-    --restart=always \
-    -e AUTOHEAL_CONTAINER_LABEL=all \
-    -e DOCKER_SOCK=tcp://$HOST:$PORT \
-    -v /path/to/certs/:/certs/:ro \
-    willfarrell/autoheal
-```
-#### TCP with mTLS (HTTPS)
-```bash
-docker run -d \
-    --name autoheal \
-    --restart=always \
-    --tlscacert=/certs/ca.pem \
-    --tlscert=/certs/client-cert.pem \
-    --tlskey=/certs/client-key.pem \
-    -e AUTOHEAL_CONTAINER_LABEL=all \
-    -e DOCKER_HOST=tcp://$HOST:2376 \
-    -e DOCKER_SOCK=tcps://$HOST:2376 \
-    -e DOCKER_TLS_VERIFY=1 \
-    -v /path/to/certs/:/certs/:ro \
-    willfarrell/autoheal
-```
-The certificates and keys need these names and resides under /certs inside the container:
-* ca.pem
-* client-cert.pem
-* client-key.pem
-
-> See https://docs.docker.com/engine/security/https/ for how to configure TCP with mTLS
-
-### Change Timezone
-If you need the timezone to match the local machine, you can map the `/etc/localtime` into the container.
-```bash
-docker run ... -v /etc/localtime:/etc/localtime:ro
+ghcr.io/betterix/docker-autoheal:latest
 ```
 
-### 2. Use in your container image
-Choose one of the three alternatives:
+---
 
-a) Apply the label `autoheal=true` to your container to have it watched;<br/>
-b) Set ENV `AUTOHEAL_CONTAINER_LABEL=all` to watch all running containers;<br/>
-c) Set ENV `AUTOHEAL_CONTAINER_LABEL` to existing container label that has the value `true`;<br/>
+## Quick Start
 
-> Note: You must apply `HEALTHCHECK` to your docker images first.<br/>
-> See https://docs.docker.com/engine/reference/builder/#healthcheck for details.
+### 1. Docker Compose (Recommended)
 
-#### Docker Compose (example)
+Add Autoheal as a service in your `docker-compose.yml`:
+
 ```yaml
 services:
-  app:
-    extends:
-      file: ${PWD}/services.yml
-      service: app
-    labels:
-      autoheal-app: true
-
   autoheal:
-    deploy:
-      replicas: 1
-    environment:
-      AUTOHEAL_CONTAINER_LABEL: autoheal-app
-    image: willfarrell/autoheal:latest
-    network_mode: none
+    image: ghcr.io/betterix/docker-autoheal:latest
+    container_name: autoheal
     restart: always
+    network_mode: none
+    environment:
+      AUTOHEAL_CONTAINER_LABEL: all
+      AUTOHEAL_INTERVAL: 10
+      AUTOHEAL_DEFAULT_STOP_TIMEOUT: 10
     volumes:
-      - /etc/localtime:/etc/localtime:ro
       - /var/run/docker.sock:/var/run/docker.sock
 ```
 
-#### Optional Container Labels
-|`autoheal.stop.timeout=20`            |Per containers override for stop timeout seconds during restart|
-| --- | --- |
+### 2. Docker CLI
 
-## Environment Defaults
-|Variable                              |Description|
-| --- | --- |
-|`AUTOHEAL_CONTAINER_LABEL=autoheal`   |set to existing label name that has the value `true`|
-|`AUTOHEAL_INTERVAL=5`                 |check every 5 seconds|
-|`AUTOHEAL_START_PERIOD=0`             |wait 0 seconds before first health check|
-|`AUTOHEAL_DEFAULT_STOP_TIMEOUT=10`    |Docker waits max 10 seconds (the Docker default) for a container to stop before killing during restarts (container overridable via label, see below)|
-|`AUTOHEAL_ONLY_MONITOR_RUNNING=false` |All containers monitored by default. Set this to true to only monitor running containers. This will result in Paused contaners being ignored.|
-|`DOCKER_SOCK=/var/run/docker.sock`    |Unix socket for curl requests to Docker API|
-|`CURL_TIMEOUT=30`                     |--max-time seconds for curl requests to Docker API|
-|`WEBHOOK_URL=""`                      |post message to the webhook if a container was restarted (or restart failed)|
+#### Standard UNIX Socket (Monitor All Containers)
 
-## Testing (building locally)
 ```bash
-docker buildx build -t autoheal .
-
 docker run -d \
-    -e AUTOHEAL_CONTAINER_LABEL=all \
-    -v /var/run/docker.sock:/var/run/docker.sock \
-    autoheal
+  --name autoheal \
+  --restart always \
+  -e AUTOHEAL_CONTAINER_LABEL=all \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  ghcr.io/betterix/docker-autoheal:latest
 ```
+
+#### Opt-in Monitoring (Only Restart Containers with `autoheal=true`)
+
+```bash
+docker run -d \
+  --name autoheal \
+  --restart always \
+  -e AUTOHEAL_CONTAINER_LABEL=autoheal \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  ghcr.io/betterix/docker-autoheal:latest
+```
+
+Then add the label to any target container:
+
+```yaml
+services:
+  web:
+    image: nginx:alpine
+    labels:
+      autoheal: "true"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+```
+
+#### TCP / Remote Docker Daemon (with mTLS)
+
+```bash
+docker run -d \
+  --name autoheal \
+  --restart always \
+  -e AUTOHEAL_CONTAINER_LABEL=all \
+  -e DOCKER_SOCK=tcps://docker.lan:2376 \
+  -v /path/to/certs:/certs:ro \
+  ghcr.io/betterix/docker-autoheal:latest
+```
+
+> **Note**: For mTLS, place your certificates under `/certs` with names `ca.pem`, `client-cert.pem`, and `client-key.pem`.
+
+---
+
+## Configuration Reference
+
+### Environment Variables
+
+| Variable | Default | Description |
+|---|---|---|
+| `AUTOHEAL_CONTAINER_LABEL` | `autoheal` | Label name to watch (matches `label=true`). Set to `all` to watch all containers. |
+| `AUTOHEAL_INTERVAL` | `5` | Polling interval in seconds between health status checks. |
+| `AUTOHEAL_START_PERIOD` | `0` | Delay in seconds before running the first check loop on startup. |
+| `AUTOHEAL_DEFAULT_STOP_TIMEOUT` | `10` | Timeout in seconds to allow a container to stop gracefully before SIGKILL. |
+| `AUTOHEAL_ONLY_MONITOR_RUNNING` | `false` | When `true`, only checks containers in `running` state (ignores paused). |
+| `DOCKER_SOCK` | `/var/run/docker.sock` | Path to Docker UNIX domain socket or TCP endpoint (`tcp://...`, `tcps://...`). |
+| `CURL_TIMEOUT` | `30` | Timeout in seconds for individual Docker API HTTP requests. |
+| `WEBHOOK_URL` | `""` | Optional HTTP URL to POST a JSON notification to when a container is restarted. |
+| `WEBHOOK_JSON_KEY` | `text` | Key name for the message string in the JSON webhook payload. |
+| `APPRISE_URL` | `""` | Optional Apprise API URL for push notifications. |
+| `POST_RESTART_SCRIPT` | `""` | Path to an executable script to run after each restart attempt. |
+
+### Container Labels
+
+| Label | Example | Purpose |
+|---|---|---|
+| `<AUTOHEAL_CONTAINER_LABEL>=true` | `autoheal=true` | Marks container to be monitored when `AUTOHEAL_CONTAINER_LABEL` is not `all`. |
+| `autoheal=False` | `autoheal=False` | Excludes container from being monitored even when watching `all`. |
+| `autoheal.stop.timeout` | `autoheal.stop.timeout=30` | Overrides the stop timeout (in seconds) for that specific container. |
+
+---
+
+## Notifications & Hooks
+
+### Webhook
+When `WEBHOOK_URL` is set, a JSON POST request is sent on restart events:
+```json
+{
+  "text": "Container web (a1b2c3d4e5f6) found to be unhealthy. Successfully restarted the container!"
+}
+```
+You can customize the key (`text`) by setting `WEBHOOK_JSON_KEY=content` (e.g. for Discord webhooks).
+
+### Apprise
+When `APPRISE_URL` is set, Autoheal sends a formatted notification payload with `title` and `body`.
+
+### Post-Restart Script
+When `POST_RESTART_SCRIPT` is defined, the executable is called with positional arguments:
+```bash
+/path/to/script.sh "$CONTAINER_NAME" "$CONTAINER_SHORT_ID" "$CONTAINER_STATE" "$TIMEOUT"
+```
+
+---
+
+## Local Development & Testing
+
+```bash
+# Lint shell scripts
+docker run --rm -v "$PWD:/mnt" koalaman/shellcheck:stable /mnt/docker-entrypoint
+
+# Build container image
+docker build -t autoheal-local .
+
+# Run locally
+docker run -d \
+  --name autoheal-local \
+  -e AUTOHEAL_CONTAINER_LABEL=all \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  autoheal-local
+```
+
+For AI agents and developer architecture guidelines, see [AGENTS.md](AGENTS.md).
+
+---
+
+## License
+
+MIT License — see [LICENSE](LICENSE) for details.
